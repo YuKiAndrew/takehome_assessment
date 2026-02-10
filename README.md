@@ -22,9 +22,6 @@ Open [http://localhost:3000](http://localhost:3000) to use the chat interface.
 
 - Node.js 18+
 - Python 3 (for the code analysis tool)
-- sk-ant-api03-MCuAfJ8gyG6WsHsxnFfNV-
-  Z8oJ_VwQYW4TrDLAek_7wAGKnEn7SKOf_UfTQgIo_a63hJUW0DS5t37ZmJn3KdRQ-
-  z4uWbAAA(https://console.anthropic.com/)
 
 ## Project Structure
 
