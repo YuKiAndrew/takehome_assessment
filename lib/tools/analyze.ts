@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { spawnSync } from "child_process";
 
 /**
  * TODO: Implement the code analysis tool
@@ -50,20 +51,65 @@ import { z } from "zod";
 
 export const analyzeTool = tool({
   description:
-    "Execute Python code for data analysis, calculations, or processing. The LLM writes Python code, and this tool runs it and returns the output.",
+    "Execute Python code for data analysis, calculations, or processing. The LLM writes Python code, and this tool runs it and returns the output. Use this for mathematical calculations, data analysis, or any computational tasks.",
   parameters: z.object({
-    // TODO: Define your parameters here
-    // Example:
-    // code: z.string().describe("Python code to execute"),
+    code: z
+      .string()
+      .min(1, "Code must not be empty")
+      .describe(
+        "Python code to execute. The code should print results to stdout. Example: print(sum([1,2,3,4,5]))"
+      ),
   }),
   execute: async (params) => {
-    // TODO: Implement the Python code execution logic
-    // 1. Extract the code from params
-    // 2. Execute it with python3
-    // 3. Return stdout, stderr, and exit code
+    const code = params.code?.trim();
+    if (!code) {
+      return {
+        error: "No Python code provided to execute",
+        exitCode: -1,
+      };
+    }
 
-    return {
-      error: "Analysis tool not implemented yet. See TODO comments in lib/tools/analyze.ts",
-    };
+    try {
+      // Execute Python code with timeout
+      const result = spawnSync("python", ["-c", params.code], {
+        timeout: 10000, // 10 seconds timeout
+        encoding: "utf-8",
+        maxBuffer: 1024 * 1024, // 1MB max buffer
+      });
+
+      // Check if the process timed out
+      if (result.error) {
+        if (result.error.message.includes("ETIMEDOUT")) {
+          return {
+            error: "Execution timed out (exceeded 10 seconds)",
+            exitCode: -1,
+          };
+        }
+        return {
+          error: `Failed to execute Python: ${result.error.message}`,
+          exitCode: -1,
+        };
+      }
+
+      // Return the results
+      return {
+        stdout: result.stdout || "",
+        stderr: result.stderr || "",
+        exitCode: result.status || 0,
+        success: result.status === 0,
+      };
+    } catch (error) {
+      // Handle unexpected errors
+      if (error instanceof Error) {
+        return {
+          error: `Unexpected error: ${error.message}`,
+          exitCode: -1,
+        };
+      }
+      return {
+        error: "An unknown error occurred while executing Python code",
+        exitCode: -1,
+      };
+    }
   },
 });

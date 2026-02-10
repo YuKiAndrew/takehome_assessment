@@ -43,19 +43,96 @@ export const weatherTool = tool({
   description:
     "Get weather forecast data for a location. Use this when the user asks about weather, temperature, rain, wind, or forecasts for any location.",
   parameters: z.object({
-    // TODO: Define your parameters here
-    // Example:
-    // latitude: z.number().describe("Latitude of the location"),
-    // longitude: z.number().describe("Longitude of the location"),
+    latitude: z.number().min(-90).max(90).describe("Latitude of the location"),
+    longitude: z.number().min(-180).max(180).describe("Longitude of the location"),
+    forecast_days: z
+      .number()
+      .min(1)
+      .max(14)
+      .default(3)
+      .describe("Number of days to forecast (1-14)"),
+    daily: z
+      .array(z.string())
+      .default([
+        "temperature_2m_max",
+        "temperature_2m_min",
+        "precipitation_sum",
+        "windspeed_10m_max",
+        "weathercode",
+      ])
+      .describe(
+        "Weather variables to include (e.g., temperature_2m_max, temperature_2m_min, precipitation_sum, windspeed_10m_max, weathercode)"
+      ),
   }),
   execute: async (params) => {
-    // TODO: Implement the weather data fetching logic
-    // 1. Build the API URL with query parameters
-    // 2. Fetch data from Open-Meteo
-    // 3. Return the parsed response
+    try {
+      // Build the API URL with query parameters
+      const url = new URL("https://api.open-meteo.com/v1/forecast");
+      url.searchParams.append("latitude", params.latitude.toString());
+      url.searchParams.append("longitude", params.longitude.toString());
+      url.searchParams.append("daily", params.daily.join(","));
+      url.searchParams.append("timezone", "auto");
+      url.searchParams.append(
+        "forecast_days",
+        params.forecast_days.toString()
+      );
 
-    return {
-      error: "Weather tool not implemented yet. See TODO comments in lib/tools/weather.ts",
-    };
+      // Fetch data from Open-Meteo API
+      const response = await fetch(url.toString());
+
+      // Handle non-200 responses
+      if (!response.ok) {
+        const body = await response.text();
+        return {
+          error: `API request failed with status ${response.status}: ${response.statusText}`,
+          ...(body && { detail: body.slice(0, 200) }),
+        };
+      }
+
+      // Parse the JSON response (may throw if body is not JSON)
+      let data: unknown;
+      try {
+        data = await response.json();
+      } catch {
+        return {
+          error: "Invalid response: could not parse JSON from weather API",
+        };
+      }
+
+      // Validate that we got the expected structure
+      if (!data || typeof data !== "object" || !("daily" in data) || !(data as Record<string, unknown>).daily) {
+        return {
+          error: "Invalid response format: missing daily forecast data",
+        };
+      }
+
+      const forecast = data as {
+        latitude?: number;
+        longitude?: number;
+        timezone?: string;
+        daily: unknown;
+        daily_units?: unknown;
+      };
+      return {
+        latitude: forecast.latitude,
+        longitude: forecast.longitude,
+        timezone: forecast.timezone,
+        daily: forecast.daily,
+        daily_units: forecast.daily_units,
+      };
+    } catch (error) {
+      // Handle network failures, DNS, and other errors
+      if (error instanceof TypeError && error.message.includes("fetch")) {
+        return { error: "Network error: could not reach weather API." };
+      }
+      if (error instanceof Error) {
+        return {
+          error: `Failed to fetch weather data: ${error.message}`,
+        };
+      }
+      return {
+        error: "An unexpected error occurred while fetching weather data",
+      };
+    }
   },
 });
